@@ -6,9 +6,8 @@ from volcenginesdkarkruntime import Ark
 
 
 class SimpleDevAgent:
-    def __init__(self, project_root, github_token, feishu_webhook):
+    def __init__(self, project_root, feishu_webhook):
         self.project_root = project_root
-        self.github_token = github_token
         self.feishu_webhook = feishu_webhook
 
         self.ark_api_key = "ark-4e5ab73a-07b7-4436-b1d9-9f3a7bc7058d-412cc"

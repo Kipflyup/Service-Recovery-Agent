@@ -9,12 +9,11 @@ import codecs
 app = Flask(__name__)
 
 
-PROJECT_ROOT = r"D:\springbootdemo\demo"
-GITHUB_TOKEN = "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"
+PROJECT_ROOT = r"D:\demo-master\demo-master"
 FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/66be4361-349b-43de-b13f-05ba4675eb50"
 
 
-agent = SimpleDevAgent(PROJECT_ROOT, GITHUB_TOKEN, FEISHU_WEBHOOK)
+agent = SimpleDevAgent(PROJECT_ROOT, FEISHU_WEBHOOK)
 
 
 @app.route('/api/error', methods=['POST'])
