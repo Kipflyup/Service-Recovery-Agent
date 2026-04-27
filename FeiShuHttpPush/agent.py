@@ -1,7 +1,6 @@
 import os
-import json
-import requests
 import subprocess
+
 from volcenginesdkarkruntime import Ark
 
 
@@ -51,24 +50,26 @@ class SimpleDevAgent:
         return push_success, push_msg
 
     # 卡片发送
-    def send_feishu_card(self, title, summary, commit_hash, fix_log):
+    def send_feishu_card(self, title, summary, commit_hash, fix_log, status="success"):
 
         import requests
         import json
 
+        status_config = {
+            "success": {"emoji": "✅", "template": "green", "btn_type": "primary"},
+            "fail":    {"emoji": "❌", "template": "red",   "btn_type": "danger"},
+            "warning": {"emoji": "⚠️", "template": "yellow", "btn_type": "default"},
+        }
+        style = status_config.get(status, status_config["success"])
+
         card = {
             "schema": "2.0",
-            "config": {
-                "update_multi": True,
-                "style": {
-                    "text_size": {
-                        "normal_v2": {
-                            "default": "normal",
-                            "pc": "normal",
-                            "mobile": "heading"
-                        }
-                    }
-                }
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": f"{style['emoji']} {title}"
+                },
+                "template": style["template"]
             },
             "body": {
                 "direction": "vertical",
@@ -77,44 +78,26 @@ class SimpleDevAgent:
                     {
                         "tag": "div",
                         "text": {
-                            "tag": "plain_text",
-                            "content": title,
-                            "text_size": "normal_v2",
-                            "text_align": "left",
-                            "text_color": "default"
-                        },
-                        "margin": "0px 0px 0px 0px"
+                            "tag": "lark_md",
+                            "content": summary
+                        }
                     },
                     {
-                        "tag": "div",
-                        "text": {
-                            "tag": "plain_text",
-                            "content": summary,
-                            "text_size": "normal_v2",
-                            "text_align": "left",
-                            "text_color": "default"
-                        },
-                        "margin": "8px 0px 0px 0px"
+                        "tag": "hr"
                     },
                     {
                         "tag": "column_set",
-                        "horizontal_align": "left",
                         "columns": [
                             {
                                 "tag": "column",
                                 "width": "weighted",
+                                "weight": 1,
                                 "elements": [
                                     {
                                         "tag": "markdown",
-                                        "content": f"**Commit:** {commit_hash}\n**Log:** {fix_log}",
-                                        "text_align": "left",
-                                        "text_size": "normal_v2"
+                                        "content": f"**Commit:** {commit_hash}\n**Log:** {fix_log}"
                                     }
-                                ],
-                                "vertical_spacing": "8px",
-                                "horizontal_align": "left",
-                                "vertical_align": "top",
-                                "weight": 1
+                                ]
                             },
                             {
                                 "tag": "column",
@@ -126,25 +109,22 @@ class SimpleDevAgent:
                                             "tag": "plain_text",
                                             "content": "查看详情"
                                         },
-                                        "type": "danger",
-                                        "width": "default",
-                                        "size": "small",
-                                        "behaviors": [
-                                            {
-                                                "type": "open_url",
-                                                "default_url": "https://open.feishu.cn",
-                                                "pc_url": "https://open.feishu.cn",
-                                                "ios_url": "https://open.feishu.cn",
-                                                "android_url": "https://open.feishu.cn"
-                                            }
-                                        ]
+                                        "type": style["btn_type"],
+                                        "url": "https://open.feishu.cn"
                                     }
-                                ],
-                                "vertical_spacing": "8px",
-                                "horizontal_align": "left",
-                                "vertical_align": "top"
+                                ]
                             }
                         ]
+                    },
+                    {
+                        "tag": "hr"
+                    },
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "lark_md",
+                            "content": "_🤖 Powered by Auto-Fix-Agent_"
+                        }
                     }
                 ]
             }
@@ -229,10 +209,11 @@ java
             if not success:
                 print(f"[FAIL] 修复失败: {fix_desc}")
                 self.send_feishu_card(
-                    title=f"[FAIL] 自动修复失败: {os.path.basename(file_path)}",
+                    title=f"自动修复失败: {os.path.basename(file_path)}",
                     summary=fix_desc,
                     commit_hash="N/A",
-                    fix_log="大模型修复环节出错"
+                    fix_log="大模型修复环节出错",
+                    status="fail"
                 )
                 return
 
@@ -246,17 +227,19 @@ java
             latest_commit = self._run_git_command("git rev-parse HEAD")[1]
             if push_success:
                 self.send_feishu_card(
-                    title=f"[SUCCESS] 自动修复完成: {os.path.basename(file_path)}",
+                    title=f"自动修复完成: {os.path.basename(file_path)}",
                     summary=f"豆包分析：{fix_desc}",
                     commit_hash=latest_commit[:7],
-                    fix_log=push_msg
+                    fix_log=push_msg,
+                    status="success"
                 )
             else:
                 self.send_feishu_card(
-                    title=f"[WARNING] 代码已修复但提交失败",
+                    title="代码已修复但提交失败",
                     summary=fix_desc,
                     commit_hash="N/A",
-                    fix_log=push_msg
+                    fix_log=push_msg,
+                    status="warning"
                 )
 
         except Exception as e:

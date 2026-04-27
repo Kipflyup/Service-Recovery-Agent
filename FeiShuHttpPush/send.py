@@ -1,16 +1,15 @@
-from flask import Flask, request, jsonify
-from agent import SimpleDevAgent
-import threading
 import os
-import sys
-import codecs
+import threading
 
+from flask import Flask, request, jsonify
+
+from agent import SimpleDevAgent
 
 app = Flask(__name__)
 
 
-PROJECT_ROOT = r"D:\demo-master\demo-master"
-FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/66be4361-349b-43de-b13f-05ba4675eb50"
+PROJECT_ROOT = os.getenv("PROJECT_ROOT", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "demo-master")))
+FEISHU_WEBHOOK = os.getenv("FEISHU_WEBHOOK", "https://open.feishu.cn/open-apis/bot/v2/hook/66be4361-349b-43de-b13f-05ba4675eb50")
 
 
 agent = SimpleDevAgent(PROJECT_ROOT, FEISHU_WEBHOOK)
@@ -39,5 +38,5 @@ if __name__ == '__main__':
     if not os.path.exists(PROJECT_ROOT):
         print(f"错误：项目目录不存在: {PROJECT_ROOT}")
     else:
-        print(f"Agent服务启动，监听地址: http://127.0.0.1:5000/api/error")
-        app.run(host='0.0.0.0', port=5000, debug=True)
+        print(f"Agent服务启动，监听地址: http://127.0.0.1:8000/api/error")
+        app.run(host='0.0.0.0', port=8000, debug=True)
