@@ -40,25 +40,14 @@ public class Application {
     }
 
     static void sendError(Exception e) {
-        // 增加异常对象非空校验
-        if (e == null) {
-            return;
-        }
         try {
             RestTemplate rt = new RestTemplate();
             String url = "http://localhost:5000/api/error";
 
 
             StringBuilder stackTraceBuilder = new StringBuilder();
-            StackTraceElement[] stackTraceElements = e.getStackTrace();
-            // 增加堆栈数组非空校验
-            if (stackTraceElements != null) {
-                for (StackTraceElement element : stackTraceElements) {
-                    // 增加单个堆栈元素非空校验
-                    if (element != null) {
-                        stackTraceBuilder.append(element.toString()).append("\n");
-                    }
-                }
+            for (StackTraceElement element : e.getStackTrace()) {
+                stackTraceBuilder.append(element.toString()).append("\n");
             }
             String stackTrace = stackTraceBuilder.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
             String errorMsg = Objects.toString(e.getMessage(), "");
