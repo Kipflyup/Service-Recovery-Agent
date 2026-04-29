@@ -1,0 +1,5 @@
+requests>=2.31.0        # 调用飞书 API
+python-dotenv>=1.0.1    # 读取 .env
+Flask>=3.0.0            # Demo Web 服务
+pytest>=8.0.0           # 测试验证
+watchdog>=4.0.0         # 监听日志变化
