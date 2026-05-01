@@ -68,13 +68,17 @@ class SimpleDevAgent:
         current_branch = self._get_current_branch()
         
         if self.github_token:
-            push_env = {
-                "GIT_ASKPASS": "echo",
-                "GIT_USERNAME": self.github_token,
-                "GIT_PASSWORD": ""
-            }
-            push_cmd = f'git push origin {current_branch}'
-            push_success, push_msg = self._run_git_command_with_env(push_cmd, push_env)
+            get_remote_cmd = "git remote get-url origin"
+            success, remote_url = self._run_git_command(get_remote_cmd)
+            if success and remote_url.startswith("https://"):
+                token_url = remote_url.replace("https://", f"https://{self.github_token}@")
+                push_cmd = f'git push {token_url} {current_branch}'
+                push_success, push_msg = self._run_git_command_with_env(push_cmd, {
+                    "GIT_TERMINAL_PROMPT": "0"
+                })
+            else:
+                push_success = False
+                push_msg = f"无法获取远程仓库URL: {remote_url}"
         else:
             push_success, push_msg = self._run_git_command(f"git push origin {current_branch}")
         
