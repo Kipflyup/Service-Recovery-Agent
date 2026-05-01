@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Send a sample Service Recovery Agent card to Feishu.用于真实验证飞书卡片链路。
+"""Send a Service Recovery Agent card to Feishu.用于真实验证飞书卡片链路。
 
 Usage:
-    python scripts/check_feishu_card.py --dry-run   只打印卡片 JSON, 不发送
-    python scripts/check_feishu_card.py   真实发送飞书卡片
+    python scripts/check_feishu_card.py --dry-run
+        只打印内置示例卡片 JSON, 不发送
+
+    python scripts/check_feishu_card.py --from-card-json /tmp/recovery_card.json --dry-run
+        只打印 run_recovery_once --emit-feishu-card-json 生成的卡片 JSON, 不发送
+
+    python scripts/check_feishu_card.py --from-card-json /tmp/recovery_card.json
+        真实发送 RecoveryResult 卡片
 """
 
 from __future__ import annotations
@@ -12,6 +18,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +40,13 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="只打印卡片 JSON，不真实发送飞书消息。",
+    )
+    parser.add_argument(
+        "--from-card-json",
+        help=(
+            "读取已有飞书 interactive card JSON 并发送；通常来自 "
+            "scripts/run_recovery_once.py --emit-feishu-card-json。"
+        ),
     )
     parser.add_argument(
         "--dotenv",
@@ -70,18 +84,22 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    card = build_recovery_card(
-        service_name=args.service_name,
-        bug_title=args.bug_title,
-        error_summary=args.error_summary,
-        confidence=args.confidence,
-        risk_level=args.risk_level,
-        test_result=args.test_result,
-        pr_url=args.pr_url,
-        repo=args.repo,
-        branch=args.branch,
-        rollback_command=args.rollback_command,
-        extra_notes=args.extra_notes,
+    card = (
+        _load_card_json(args.from_card_json)
+        if args.from_card_json
+        else build_recovery_card(
+            service_name=args.service_name,
+            bug_title=args.bug_title,
+            error_summary=args.error_summary,
+            confidence=args.confidence,
+            risk_level=args.risk_level,
+            test_result=args.test_result,
+            pr_url=args.pr_url,
+            repo=args.repo,
+            branch=args.branch,
+            rollback_command=args.rollback_command,
+            extra_notes=args.extra_notes,
+        )
     )
 
     if args.dry_run:
@@ -116,6 +134,22 @@ def main() -> int:
     return 0
 
 
+def _load_card_json(path: str) -> dict[str, Any]:
+    """Load an interactive-card JSON document from disk."""
+
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise SystemExit(f"❌ 无法读取卡片 JSON：{path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"❌ 卡片 JSON 格式错误：{path}: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise SystemExit("❌ 卡片 JSON 顶层必须是 object/dict。")
+    if not isinstance(raw.get("header"), dict) or not isinstance(raw.get("elements"), list):
+        raise SystemExit("❌ 卡片 JSON 缺少 Feishu interactive card 所需的 header/elements。")
+    return raw
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
-

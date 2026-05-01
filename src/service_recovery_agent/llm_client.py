@@ -211,8 +211,9 @@ class MockLLMClient:
                     "当 denominator 为 0 时，Python 抛出 ZeroDivisionError。"
                 ),
                 "fix_strategy": (
-                    "保持 unsafe_divide 的函数签名和返回类型不变，在函数内部增加 denominator == 0 "
-                    "的保护逻辑，并让路由层在后续 patch 阶段把该输入转换为明确的 400 响应。"
+                    "保持 unsafe_divide 的函数签名和返回类型不变，新增一个受控输入错误类型，"
+                    "在 denominator == 0 时抛出该受控异常，并由 Flask error handler 转换为明确的 "
+                    "400 invalid_request 响应，避免继续产生 500 Traceback。"
                 ),
                 "change_type": "B",
                 "risk_level": "medium",
@@ -220,28 +221,56 @@ class MockLLMClient:
                 "contract_constraints": [
                     "不要修改 unsafe_divide(numerator: float, denominator: float) -> float 的函数签名。",
                     "不要改变 /divide?x=4 等正常路径的计算结果。",
+                    "denominator == 0 应返回受控 400 错误，而不是 500 internal_server_error。",
+                    "不要返回 NaN、Infinity 或 -Infinity 这类非标准 JSON 特殊浮点值。",
                     "不要大面积重构 create_app 或 Flask 路由注册方式。",
                     "优先使用函数内部兼容修复，并补充 denominator == 0 的回归测试。",
                 ],
                 "patch_draft": (
                     "--- a/demo_service/app.py\n"
                     "+++ b/demo_service/app.py\n"
-                    "@@ -28,4 +28,7 @@ def unsafe_divide(numerator: float, denominator: float) -> float:\n"
+                    "@@ -23,11 +23,18 @@\n"
+                    " DEFAULT_LOG_PATH = Path(\"logs/app.log\")\n"
+                    " \n"
+                    " \n"
+                    "+class InvalidDivideInput(ValueError):\n"
+                    "+    \"\"\"Raised when divide input is invalid for the demo API.\"\"\"\n"
+                    "+\n"
+                    "+\n"
+                    " def unsafe_divide(numerator: float, denominator: float) -> float:\n"
+                    "     \"\"\"Deliberately unsafe helper used to produce a reproducible demo bug.\"\"\"\n"
+                    " \n"
                     "     # Intentional bug for the recovery demo:\n"
                     "     # denominator == 0 currently raises ZeroDivisionError.\n"
                     "+    if denominator == 0:\n"
-                    "+        raise ValueError(\"denominator must not be zero\")\n"
+                    "+        raise InvalidDivideInput(\"denominator must not be zero\")\n"
                     "+\n"
                     "     return numerator / denominator\n"
+                    " \n"
+                    " \n"
+                    "@@ -87,6 +94,12 @@\n"
+                    " \n"
+                    "     @app.errorhandler(Exception)\n"
+                    "     def handle_unexpected_error(error: Exception) -> tuple[Any, int]:\n"
+                    "+        if isinstance(error, InvalidDivideInput):\n"
+                    "+            return {\n"
+                    "+                \"error\": \"invalid_request\",\n"
+                    "+                \"message\": str(error),\n"
+                    "+            }, 400\n"
+                    "+\n"
+                    "         if isinstance(error, HTTPException):\n"
+                    "             return {\n"
+                    "                 \"error\": error.name,\n"
                 ),
                 "tests_to_run": [
-                    "pytest",
+                    "python -m pytest -q -m 'not seed_failure'",
+                    "python scripts/validate_demo_repair.py",
                     "curl \"http://127.0.0.1:5001/divide?x=4\"",
                     "curl \"http://127.0.0.1:5001/divide?x=0\"",
                 ],
                 "manual_review_notes": (
-                    "这是 patch 草案，不会自动修改文件。真正应用前需要决定 denominator == 0 "
-                    "应该在业务契约上返回 400、None，还是抛出 ValueError 并由路由层转换。"
+                    "这是 patch 草案，不会自动修改文件。该策略将 denominator == 0 从未处理 500 崩溃"
+                    "转换为 400 invalid_request，属于 Web API 错误响应语义变化，需要人工确认该契约符合业务预期。"
                 ),
             },
             ensure_ascii=False,

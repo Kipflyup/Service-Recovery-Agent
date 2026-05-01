@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = PROJECT_ROOT / "src"
@@ -32,6 +34,7 @@ def test_divide_happy_path(tmp_path: Path) -> None:
     assert response.get_json()["result"] == 25.0
 
 
+@pytest.mark.seed_failure
 def test_divide_by_zero_writes_traceback_log(tmp_path: Path) -> None:
     log_path = tmp_path / "app.log"
     app = create_app(log_path=log_path, testing=True)
@@ -57,4 +60,3 @@ def test_divide_by_zero_writes_traceback_log(tmp_path: Path) -> None:
     assert traceback_event.frames
     assert traceback_event.crash_frame is not None
     assert traceback_event.crash_frame.file.endswith("demo_service/app.py") or traceback_event.crash_frame.file.endswith("demo_service\\app.py")
-

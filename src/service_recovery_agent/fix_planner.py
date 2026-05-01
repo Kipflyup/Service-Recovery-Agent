@@ -8,7 +8,15 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
 from .code_context import CodeContext, format_code_context_report
+from .failure_feedback import RepairFailureFeedback
+from .fault_diagnosis import FaultDiagnosis, format_fault_diagnosis_report
+from .git_diff_correlation import (
+    GitDiffCorrelationResult,
+    format_git_diff_correlation_evidence,
+)
+from .invariant_analyzer import DeepImpactAssessment, format_hidden_invariant_evidence
 from .llm_client import LLMClient
+from .sbfl import SBFLResult, format_sbfl_result
 
 
 SYSTEM_PROMPT = """你是 Service Recovery Agent 的修复规划器。
@@ -16,6 +24,11 @@ SYSTEM_PROMPT = """你是 Service Recovery Agent 的修复规划器。
 你不能声称已经修改代码，不能执行命令，不能提交 PR。
 你必须优先保持外部契约不变，避免改函数签名、返回类型、异常语义和路由注册方式。
 这是 Web API 服务场景：除非 CodeContext 明确说明业务允许，否则不要把非法输入转换为 NaN、Infinity 或 -Infinity 这类非标准 JSON 特殊浮点值；对用户非法输入应优先规划为明确的 4xx 错误或受控业务错误。
+如果用户 prompt 中包含 Deterministic Fault Diagnosis，它是确定性程序分析结果，优先级高于普通模型推断；必须优先满足其中的 repair_constraints，特别是 avoid_special_float 和 web_api_error_semantics。
+如果用户 prompt 中包含 Git Diff Correlation Evidence，它是只读 Git history / diff 的确定性证据，只能作为根因定位辅助；不要把“最近修改过”直接等同于“必然根因”，但必须在 root_cause / fix_strategy 中合理利用高分候选。
+如果用户 prompt 中包含 SBFL Result，它是测试覆盖频谱的确定性 suspiciousness evidence；不要把高分行直接等同于必然根因，但必须优先审视高分且与 traceback / diagnosis / recent diff 交叉支持的行。
+如果用户 prompt 中包含 Hidden Invariant Evidence，它只是提示词证据和人工 review hint，不是 hard gate；应优先保持高置信度的类型、测试、调用方和路由契约，除非验证证据明确要求改变。
+如果 Fault Diagnosis 指出多个调用方或对抗测试提示，例如 /divide 和 /bug，patch 草案必须覆盖所有相关调用路径，不能只修复单一路由入口。
 输出必须是一个合法 JSON 对象，不要输出 Markdown，不要包裹 ```json 代码块。"""
 
 
@@ -42,11 +55,67 @@ class FixProposalParseError(RuntimeError):
     """Raised when an LLM response cannot be parsed into a FixProposal."""
 
 
-def build_fix_prompt(context: CodeContext) -> str:
+def build_fix_prompt(
+    context: CodeContext,
+    diagnosis: FaultDiagnosis | None = None,
+    failure_feedback: RepairFailureFeedback | None = None,
+    git_diff_correlation: GitDiffCorrelationResult | None = None,
+    sbfl_result: SBFLResult | None = None,
+    hidden_invariants: DeepImpactAssessment | None = None,
+) -> str:
     """Build the prompt sent to Doubao / Mock LLM."""
 
     context_report = format_code_context_report(context)
-    context_json = json.dumps(_compact_context(context), ensure_ascii=False, indent=2)
+    context_payload = _compact_context(context)
+    if diagnosis is not None:
+        context_payload["fault_diagnosis"] = diagnosis.to_dict()
+    if git_diff_correlation is not None:
+        context_payload["git_diff_correlation"] = git_diff_correlation.to_dict()
+    if sbfl_result is not None:
+        context_payload["sbfl_result"] = sbfl_result.to_dict()
+    if hidden_invariants is not None:
+        context_payload["hidden_invariants"] = hidden_invariants.to_dict()
+    if failure_feedback is not None:
+        context_payload["failure_feedback"] = failure_feedback.to_dict()
+    context_json = json.dumps(context_payload, ensure_ascii=False, indent=2)
+
+    diagnosis_section = ""
+    if diagnosis is not None:
+        diagnosis_section = f"""
+## Deterministic Fault Diagnosis
+
+{format_fault_diagnosis_report(diagnosis)}
+"""
+
+    git_diff_section = ""
+    if git_diff_correlation is not None:
+        git_diff_section = f"""
+{format_git_diff_correlation_evidence(git_diff_correlation)}
+"""
+
+    sbfl_section = ""
+    if sbfl_result is not None:
+        sbfl_section = f"""
+{format_sbfl_result(sbfl_result)}
+"""
+
+    hidden_invariant_section = ""
+    if hidden_invariants is not None:
+        hidden_invariant_section = f"""
+{format_hidden_invariant_evidence(hidden_invariants)}
+"""
+
+    failure_feedback_section = ""
+    if failure_feedback is not None:
+        failure_feedback_section = f"""
+## Previous Repair Failure Feedback
+
+The previous patch attempt failed after validation. Use this feedback to revise the next patch draft:
+
+```text
+{failure_feedback.prompt_feedback.rstrip()}
+```
+"""
 
     return f"""请基于下面的 CodeContext 生成修复建议。
 
@@ -61,7 +130,30 @@ def build_fix_prompt(context: CodeContext) -> str:
    - 不要把运行时崩溃静默转换成特殊浮点值；
    - 对用户非法输入优先规划为 4xx 响应或受控业务错误；
    - 如果 patch 需要改变 HTTP 状态码、错误响应格式或异常语义，必须在 manual_review_notes 中标记需要人工确认。
-7. change_type 只能是 A/B/C/D/E：
+7. 如果下面提供了 Deterministic Fault Diagnosis：
+   - 必须优先满足其中的 Repair Constraints；
+   - 必须覆盖其中指出的故障变量、触发条件和调用方；
+   - 必须优先满足 avoid_special_float 和 web_api_error_semantics；
+   - 必须参考 Adversarial Hints 规划需要运行的测试，尤其是 /divide?x=0、/divide?x=-1、/divide、/bug 和重复触发场景。
+8. 如果下面提供了 Git Diff Correlation Evidence：
+   - 把它作为 recent-change root-cause evidence，而不是唯一真相；
+   - 优先关注 score 高、同时命中 crash file、crash line、crash function 的候选；
+   - root_cause 中应说明 recent diff evidence 是否支持当前修复判断；
+   - 不要为了匹配 recent diff 而扩大修改范围。
+9. 如果下面提供了 SBFL Result：
+   - 把它作为测试覆盖频谱 suspiciousness evidence，而不是唯一真相；
+   - 优先审视 Top Suspicious Lines，尤其是与 traceback crash site、Fault Diagnosis 或 Git Diff Correlation 同时指向的行；
+   - 如果 SBFL 状态为 PARTIAL / UNAVAILABLE，不要过度依赖它；
+   - 不要为了迎合 SBFL 分数而扩大修改范围。
+10. 如果下面提供了 Hidden Invariant Evidence：
+   - 只把它作为 prompt evidence / review hint，不要当成 hard gate；
+   - 优先保持高置信度 test/type/caller/route 契约；
+   - 如果修复策略可能改变这些隐含契约，必须在 manual_review_notes 中说明。
+11. 如果下面提供了 Previous Repair Failure Feedback：
+   - 必须显式修正上一轮失败的 probe；
+   - patch_draft 必须覆盖 failed_probes 中列出的请求路径和实际失败原因；
+   - manual_review_notes 中必须说明上一轮失败如何被本轮 patch 处理。
+12. change_type 只能是 A/B/C/D/E：
    - A: 纯增量防护，例如输入校验、空值保护、边界保护；
    - B: 函数内部逻辑修正；
    - C: 签名兼容重构；
@@ -84,6 +176,11 @@ def build_fix_prompt(context: CodeContext) -> str:
 ## Human-readable CodeContext
 
 {context_report}
+{diagnosis_section}
+{git_diff_section}
+{sbfl_section}
+{hidden_invariant_section}
+{failure_feedback_section}
 
 ## Machine-readable CodeContext
 
@@ -93,10 +190,25 @@ def build_fix_prompt(context: CodeContext) -> str:
 """
 
 
-def propose_fix(context: CodeContext, client: LLMClient) -> FixProposal:
+def propose_fix(
+    context: CodeContext,
+    client: LLMClient,
+    diagnosis: FaultDiagnosis | None = None,
+    failure_feedback: RepairFailureFeedback | None = None,
+    git_diff_correlation: GitDiffCorrelationResult | None = None,
+    sbfl_result: SBFLResult | None = None,
+    hidden_invariants: DeepImpactAssessment | None = None,
+) -> FixProposal:
     """Ask the LLM client for a fix proposal and parse it."""
 
-    prompt = build_fix_prompt(context)
+    prompt = build_fix_prompt(
+        context,
+        diagnosis=diagnosis,
+        failure_feedback=failure_feedback,
+        git_diff_correlation=git_diff_correlation,
+        sbfl_result=sbfl_result,
+        hidden_invariants=hidden_invariants,
+    )
     raw_response = client.complete(prompt, system=SYSTEM_PROMPT)
     proposal = parse_fix_proposal(
         raw_response,

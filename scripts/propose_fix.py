@@ -23,11 +23,13 @@ for path in (PROJECT_ROOT, SRC_DIR):
         sys.path.insert(0, str(path))
 
 from service_recovery_agent.code_context import build_code_context  # noqa: E402
+from service_recovery_agent.fault_diagnosis import diagnose_fault  # noqa: E402
 from service_recovery_agent.fix_planner import (  # noqa: E402
     build_fix_prompt,
     format_fix_proposal_report,
     propose_fix,
 )
+from service_recovery_agent.git_diff_correlation import correlate_traceback_with_recent_diff  # noqa: E402
 from service_recovery_agent.llm_client import LLMClientError, create_llm_client  # noqa: E402
 from service_recovery_agent.log_watcher import read_latest_traceback, wait_for_traceback  # noqa: E402
 
@@ -82,6 +84,22 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="只打印将发送给 LLM 的 prompt，不调用 LLM。",
     )
+    parser.add_argument(
+        "--no-diagnosis",
+        action="store_true",
+        help="调试旧链路：不生成/注入 FaultDiagnosis。默认会自动注入确定性故障诊断。",
+    )
+    parser.add_argument(
+        "--no-git-diff-correlation",
+        action="store_true",
+        help="不收集/注入只读 Git Diff Correlation evidence。默认会只读 git log/git show。",
+    )
+    parser.add_argument(
+        "--git-diff-max-commits",
+        type=int,
+        default=5,
+        help="Git Diff Correlation 检查最近多少个 commit；默认 5。",
+    )
     return parser.parse_args()
 
 
@@ -114,14 +132,35 @@ def main() -> int:
         project_root=args.project_root,
         context_lines=args.context_lines,
     )
+    diagnosis = None if args.no_diagnosis else diagnose_fault(context)
+    git_diff_correlation = (
+        None
+        if args.no_git_diff_correlation
+        else correlate_traceback_with_recent_diff(
+            context,
+            project_root=args.project_root,
+            max_commits=args.git_diff_max_commits,
+        )
+    )
 
     if args.print_prompt:
-        print(build_fix_prompt(context))
+        print(
+            build_fix_prompt(
+                context,
+                diagnosis=diagnosis,
+                git_diff_correlation=git_diff_correlation,
+            )
+        )
         return 0
 
     try:
         client = create_llm_client(provider=args.provider, dotenv_path=args.dotenv)
-        proposal = propose_fix(context, client)
+        proposal = propose_fix(
+            context,
+            client,
+            diagnosis=diagnosis,
+            git_diff_correlation=git_diff_correlation,
+        )
     except LLMClientError as exc:
         print(f"LLM client error: {exc}", file=sys.stderr)
         print("如果只是本地验证链路，可运行：python scripts/propose_fix.py --provider mock", file=sys.stderr)
@@ -137,4 +176,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
