@@ -6,9 +6,10 @@ from volcenginesdkarkruntime import Ark
 
 
 class SimpleDevAgent:
-    def __init__(self, project_root, feishu_webhook):
+    def __init__(self, project_root, feishu_webhook, github_token=None):
         self.project_root = project_root
         self.feishu_webhook = feishu_webhook
+        self.github_token = github_token
 
         self.ark_api_key = "ark-4e5ab73a-07b7-4436-b1d9-9f3a7bc7058d-412cc"
         self.ark_endpoint_id = "ep-20260423222752-9tcpw"
@@ -22,14 +23,27 @@ class SimpleDevAgent:
         self.git_user_name = "Auto-Fix-Agent"
         self.git_user_email = "agent@example.com"
 
-    # git
-    def _run_git_command(self, cmd):
-
+    def _run_git_command_with_env(self, cmd, env_vars=None):
+        env = os.environ.copy()
+        if env_vars:
+            env.update(env_vars)
+        
         try:
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=self.project_root, encoding='utf-8', errors='ignore')
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, 
+                                  cwd=self.project_root, encoding='utf-8', errors='ignore',
+                                  env=env)
             return result.returncode == 0, result.stdout.strip()
         except Exception as e:
             return False, str(e)
+
+    def _run_git_command(self, cmd):
+        return self._run_git_command_with_env(cmd)
+
+    def _get_current_branch(self):
+        success, output = self._run_git_command("git branch --show-current")
+        if success and output:
+            return output.strip()
+        return "main"
 
     def commit_changes(self, commit_msg):
 
@@ -37,14 +51,33 @@ class SimpleDevAgent:
         if not add_success:
             return False, f"git add failed: {add_msg}"
 
-        # 使用环境变量临时设置 Git 用户，不影响全局配置
-        commit_cmd = f'GIT_COMMITTER_NAME="{self.git_user_name}" GIT_COMMITTER_EMAIL="{self.git_user_email}" GIT_AUTHOR_NAME="{self.git_user_name}" GIT_AUTHOR_EMAIL="{self.git_user_email}" git commit -m "{commit_msg}"'
-        commit_success, commit_msg_out = self._run_git_command(commit_cmd)
+        git_env = {
+            "GIT_COMMITTER_NAME": self.git_user_name,
+            "GIT_COMMITTER_EMAIL": self.git_user_email,
+            "GIT_AUTHOR_NAME": self.git_user_name,
+            "GIT_AUTHOR_EMAIL": self.git_user_email,
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null"
+        }
+        
+        commit_cmd = f'git commit -m "{commit_msg}"'
+        commit_success, commit_msg_out = self._run_git_command_with_env(commit_cmd, git_env)
         if not commit_success:
             return False, f"git commit failed: {commit_msg_out}"
 
-        # 推送
-        push_success, push_msg = self._run_git_command("git push origin main")
+        current_branch = self._get_current_branch()
+        
+        if self.github_token:
+            push_env = {
+                "GIT_ASKPASS": "echo",
+                "GIT_USERNAME": self.github_token,
+                "GIT_PASSWORD": ""
+            }
+            push_cmd = f'git push origin {current_branch}'
+            push_success, push_msg = self._run_git_command_with_env(push_cmd, push_env)
+        else:
+            push_success, push_msg = self._run_git_command(f"git push origin {current_branch}")
+        
         return push_success, push_msg
 
     # 卡片发送

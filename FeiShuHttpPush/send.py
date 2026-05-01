@@ -11,9 +11,10 @@ app = Flask(__name__)
 
 PROJECT_ROOT = r"D:\demo-master\demo-master"
 FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/66be4361-349b-43de-b13f-05ba4675eb50"
+GITHUB_TOKEN = "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"
 
 
-agent = SimpleDevAgent(PROJECT_ROOT, FEISHU_WEBHOOK)
+agent = SimpleDevAgent(PROJECT_ROOT, FEISHU_WEBHOOK, GITHUB_TOKEN)
 
 
 @app.route('/api/error', methods=['POST'])
