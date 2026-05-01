@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
@@ -13,6 +15,9 @@ for path in (PROJECT_ROOT, SRC_DIR):
 from demo_service.app import create_app  # noqa: E402
 from service_recovery_agent.code_context import build_code_context, format_code_context_report  # noqa: E402
 from service_recovery_agent.log_watcher import read_latest_traceback  # noqa: E402
+
+
+pytestmark = pytest.mark.seed_failure
 
 
 def test_build_code_context_for_demo_zero_division(tmp_path: Path) -> None:

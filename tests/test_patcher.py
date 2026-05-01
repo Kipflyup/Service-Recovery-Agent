@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
@@ -61,6 +63,7 @@ def _demo_context(tmp_path: Path):
     return build_code_context(event, project_root=PROJECT_ROOT)
 
 
+@pytest.mark.seed_failure
 def test_dry_run_patch_can_apply_valid_patch() -> None:
     result = dry_run_patch(VALID_PATCH, project_root=PROJECT_ROOT)
 
@@ -76,6 +79,7 @@ def test_dry_run_patch_rejects_bad_context() -> None:
     assert result.return_code != 0
 
 
+@pytest.mark.seed_failure
 def test_preview_patch_skips_dry_run_when_safety_fails(tmp_path: Path) -> None:
     context = _demo_context(tmp_path)
 

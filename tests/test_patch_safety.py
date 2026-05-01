@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
@@ -14,6 +16,9 @@ from demo_service.app import create_app  # noqa: E402
 from service_recovery_agent.code_context import build_code_context  # noqa: E402
 from service_recovery_agent.log_watcher import read_latest_traceback  # noqa: E402
 from service_recovery_agent.patch_safety import review_patch_safety  # noqa: E402
+
+
+pytestmark = pytest.mark.seed_failure
 
 
 def _demo_context(tmp_path: Path):
@@ -116,4 +121,3 @@ def test_dangerous_operation_fails(tmp_path: Path) -> None:
 
     assert review.status == "FAIL"
     assert any(finding.check == "dangerous_operations" and finding.status == "FAIL" for finding in review.findings)
-
