@@ -13,20 +13,23 @@
 
 ### demo-master
 
-Spring Boot 示例应用，包含异常捕获与 webhook 推送功能。
+Spring Boot 示例应用，使用 AOP 实现全局异常自动捕获与 webhook 推送。
 
 **技术栈：**
-- Java 17
-- Spring Boot 4.0.6
+- Java 8 (1.8.0_161)
+- Spring Boot 2.7.18
 - Maven
 
 **启动方式：**
 ```bash
 cd demo-master
-./mvnw spring-boot:run
+./mvnw spring-boot:run -DskipTests
 ```
 
-应用默认运行在 `http://localhost:8080`
+应用默认运行在 `http://localhost:5001`（可在 `application.properties` 中修改）
+
+**测试接口：**
+- `GET /test` - 触发 NullPointerException，测试 AOP 全局异常拦截
 
 ### FeiShuHttpPush
 
@@ -57,7 +60,7 @@ python send.py
 ```
 ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
 │  Spring Boot    │         │   Flask API     │         │    豆包大模型    │
-│  (端口 8080)    │ ──────► │  (端口 5000)    │ ──────► │   (Ark API)     │
+│  (端口 5001)    │ ──────► │  (端口 5000)    │ ──────► │   (Ark API)     │
 │                 │ HTTP    │                 │         │                 │
 └─────────────────┘ POST    └─────────────────┘         └─────────────────┘
                                       │
@@ -78,15 +81,35 @@ demo-master/
 │   └── send.py            # Flask API 服务入口
 ├── demo-master/
 │   ├── src/
-│   │   └── main/
-│   │       ├── java/
-│   │       │   └── com/example/demo/
-│   │       │       └── Application.java
-│   │       └── resources/
-│   │           └── application.properties
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── com/example/demo/
+│   │   │   │       ├── Application.java       # 主入口 + TestController
+│   │   │   │       └── GlobalExceptionAspect.java  # AOP 全局异常切面
+│   │   │   └── resources/
+│   │   │       └── application.properties
+│   │   └── test/
+│   │       └── java/
+│   │           └── com/example/demo/
+│   │               └── DemoApplicationTests.java
 │   ├── pom.xml
 │   └── mvnw
 └── README.md
+```
+
+## 关键实现
+
+### AOP 全局异常拦截
+- 使用 `@Around` 环绕通知拦截所有包内方法异常
+- 从堆栈信息动态提取出错文件路径（支持内部类，自动去除 `$` 后缀）
+- JSON 格式发送到 Agent 服务（端口 5000）
+
+### 动态 filePath 提取
+```java
+// 处理内部类：去掉 $ 及其后面的部分
+if (className.contains("$")) {
+    className = className.substring(0, className.indexOf("$"));
+}
 ```
 
 ## 注意事项
