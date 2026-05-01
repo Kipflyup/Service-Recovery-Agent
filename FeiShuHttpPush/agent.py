@@ -22,10 +22,6 @@ class SimpleDevAgent:
         self.git_user_name = "Auto-Fix-Agent"
         self.git_user_email = "agent@example.com"
 
-
-        self._run_git_command(f'git config user.name "{self.git_user_name}"')
-        self._run_git_command(f'git config user.email "{self.git_user_email}"')
-
     # git
     def _run_git_command(self, cmd):
 
@@ -41,8 +37,9 @@ class SimpleDevAgent:
         if not add_success:
             return False, f"git add failed: {add_msg}"
 
-        # 提交
-        commit_success, commit_msg_out = self._run_git_command(f'git commit -m "{commit_msg}"')
+        # 使用环境变量临时设置 Git 用户，不影响全局配置
+        commit_cmd = f'GIT_COMMITTER_NAME="{self.git_user_name}" GIT_COMMITTER_EMAIL="{self.git_user_email}" GIT_AUTHOR_NAME="{self.git_user_name}" GIT_AUTHOR_EMAIL="{self.git_user_email}" git commit -m "{commit_msg}"'
+        commit_success, commit_msg_out = self._run_git_command(commit_cmd)
         if not commit_success:
             return False, f"git commit failed: {commit_msg_out}"
 
