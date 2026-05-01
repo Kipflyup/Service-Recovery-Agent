@@ -20,7 +20,9 @@ public class Application {
         public String testException() {
             System.out.println("starting...");
             Object obj = null;
-            obj.toString();
+            if (obj != null) {
+                obj.toString();
+            }
             return "ok";
         }
     }
