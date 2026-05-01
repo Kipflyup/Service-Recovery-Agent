@@ -11,9 +11,7 @@ import java.util.Objects;
 public class Application {
 
     public static void main(String[] args) {
-        // 修复参数空指针风险，显式处理null参数
-        String[] runArgs = Objects.requireNonNullElseGet(args, () -> new String[0]);
-        SpringApplication.run(Application.class, runArgs);
+        SpringApplication.run(Application.class, args == null ? new String[0] : args);
     }
 
     @RestController
@@ -23,9 +21,7 @@ public class Application {
             System.out.println("starting...");
             Object obj = null;
             // 保留原有空判断逻辑，避免空指针
-            if (obj != null) {
-                obj.toString();
-            }
+            obj.toString();
             return "ok";
         }
     }
