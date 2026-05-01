@@ -66,20 +66,30 @@ class SimpleDevAgent:
             return False, f"git commit failed: {commit_msg_out}"
 
         current_branch = self._get_current_branch()
+        print(f"[DEBUG] 当前分支: {current_branch}")
         
         if self.github_token:
-            get_remote_cmd = "git remote get-url origin"
-            success, remote_url = self._run_git_command(get_remote_cmd)
-            if success and remote_url.startswith("https://"):
-                token_url = remote_url.replace("https://", f"https://{self.github_token}@")
-                push_cmd = f'git push {token_url} {current_branch}'
-                push_success, push_msg = self._run_git_command_with_env(push_cmd, {
-                    "GIT_TERMINAL_PROMPT": "0"
-                })
-            else:
-                push_success = False
-                push_msg = f"无法获取远程仓库URL: {remote_url}"
+            print(f"[DEBUG] GitHub Token 已配置，使用 credential helper")
+            import tempfile
+            cred_file = os.path.join(tempfile.gettempdir(), 'feishu_agent_git_cred')
+            with open(cred_file, 'w') as f:
+                f.write(f"https://{self.github_token}@github.com\n")
+            
+            push_env = {
+                "GIT_TERMINAL_PROMPT": "0",
+                "GIT_HTTP_USER_AGENT": "git/1.0"
+            }
+            push_cmd = f'git -c credential.helper="store --file={cred_file}" push origin {current_branch}'
+            print(f"[DEBUG] 执行推送: git -c credential.helper='store' push origin {current_branch}")
+            push_success, push_msg = self._run_git_command_with_env(push_cmd, push_env)
+            print(f"[DEBUG] push_success: {push_success}, push_msg: {push_msg}")
+            
+            try:
+                os.remove(cred_file)
+            except:
+                pass
         else:
+            print(f"[DEBUG] 无 GitHub Token，使用默认 origin")
             push_success, push_msg = self._run_git_command(f"git push origin {current_branch}")
         
         return push_success, push_msg
@@ -262,12 +272,7 @@ java
 
             if not success:
                 print(f"[FAIL] 修复失败: {fix_desc}")
-                self.send_feishu_card(
-                    title=f"[FAIL] 自动修复失败: {os.path.basename(file_path)}",
-                    summary=fix_desc,
-                    commit_hash="N/A",
-                    fix_log="大模型修复环节出错"
-                )
+                print("[SEND-FEISHU-SKIPPED] send_feishu_card()")
                 return
 
 
@@ -279,19 +284,14 @@ java
 
             latest_commit = self._run_git_command("git rev-parse HEAD")[1]
             if push_success:
-                self.send_feishu_card(
-                    title=f"[SUCCESS] 自动修复完成: {os.path.basename(file_path)}",
-                    summary=f"豆包分析：{fix_desc}",
-                    commit_hash=latest_commit[:7],
-                    fix_log=push_msg
-                )
+                print(f"[SUCCESS] 自动修复完成!")
+                print(f"  - Commit: {latest_commit[:7]}")
+                print(f"  - Push Log: {push_msg}")
+                print("[SEND-FEISHU-SKIPPED] send_feishu_card()")
             else:
-                self.send_feishu_card(
-                    title=f"[WARNING] 代码已修复但提交失败",
-                    summary=fix_desc,
-                    commit_hash="N/A",
-                    fix_log=push_msg
-                )
+                print(f"[WARNING] 代码已修复但提交失败")
+                print(f"  - Push Log: {push_msg}")
+                print("[SEND-FEISHU-SKIPPED] send_feishu_card()")
 
         except Exception as e:
-            print(f" Agent 处理流程异常: {e}")
+            print(f"[EXCEPTION] Agent 处理流程异常: {e}")

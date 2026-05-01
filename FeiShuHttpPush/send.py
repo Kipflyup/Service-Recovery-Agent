@@ -9,7 +9,7 @@ import codecs
 app = Flask(__name__)
 
 
-PROJECT_ROOT = r"D:\demo-master\demo-master"
+PROJECT_ROOT = r"D:\demo-master"
 FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/66be4361-349b-43de-b13f-05ba4675eb50"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
