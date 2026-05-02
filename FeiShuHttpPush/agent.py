@@ -272,7 +272,12 @@ java
 
             if not success:
                 print(f"[FAIL] 修复失败: {fix_desc}")
-                print("[SEND-FEISHU-SKIPPED] send_feishu_card()")
+                self.send_feishu_card(
+                    title=f"[FAIL] 自动修复失败: {os.path.basename(file_path)}",
+                    summary=fix_desc,
+                    commit_hash="N/A",
+                    fix_log="大模型修复环节出错"
+                )
                 return
 
 
@@ -287,11 +292,21 @@ java
                 print(f"[SUCCESS] 自动修复完成!")
                 print(f"  - Commit: {latest_commit[:7]}")
                 print(f"  - Push Log: {push_msg}")
-                print("[SEND-FEISHU-SKIPPED] send_feishu_card()")
+                self.send_feishu_card(
+                    title=f"[SUCCESS] 自动修复完成: {os.path.basename(file_path)}",
+                    summary=f"豆包分析：{fix_desc}",
+                    commit_hash=latest_commit[:7],
+                    fix_log=push_msg
+                )
             else:
                 print(f"[WARNING] 代码已修复但提交失败")
                 print(f"  - Push Log: {push_msg}")
-                print("[SEND-FEISHU-SKIPPED] send_feishu_card()")
+                self.send_feishu_card(
+                    title=f"[WARNING] 代码已修复但提交失败",
+                    summary=fix_desc,
+                    commit_hash="N/A",
+                    fix_log=push_msg
+                )
 
         except Exception as e:
             print(f"[EXCEPTION] Agent 处理流程异常: {e}")

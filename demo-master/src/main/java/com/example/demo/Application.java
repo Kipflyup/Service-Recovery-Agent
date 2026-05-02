@@ -21,7 +21,9 @@ public class Application {
             System.out.println("starting...");
             Object obj = null;
             // 保留原有空判断逻辑，避免空指针
-            obj.toString();
+            if (Objects.nonNull(obj)) {
+                obj.toString();
+            }
             return "ok";
         }
     }
