@@ -11,7 +11,7 @@ import java.util.Objects;
 public class Application {
 
     public static void main(String[] args) {
-        SpringApplication.run(Application.class, args == null ? new String[0] : args);
+        SpringApplication.run(Objects.requireNonNull(Application.class), Objects.requireNonNullElse(args, new String[0]));
     }
 
     @RestController
