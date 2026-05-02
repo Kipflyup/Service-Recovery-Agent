@@ -45,6 +45,13 @@ class SimpleDevAgent:
             return output.strip()
         return "main"
 
+    def _get_current_remote(self, branch_name):
+        # 获取当前分支追踪的远程仓库
+        success, output = self._run_git_command(f"git config branch.{branch_name}.remote")
+        if success and output:
+            return output.strip()
+        return "origin"
+
     def commit_changes(self, commit_msg):
 
         add_success, add_msg = self._run_git_command("git add .")
@@ -66,7 +73,8 @@ class SimpleDevAgent:
             return False, f"git commit failed: {commit_msg_out}"
 
         current_branch = self._get_current_branch()
-        print(f"[DEBUG] 当前分支: {current_branch}")
+        current_remote = self._get_current_remote(current_branch)
+        print(f"[DEBUG] 当前分支: {current_branch}, 当前远程: {current_remote}")
         
         if self.github_token:
             print(f"[DEBUG] GitHub Token 已配置，使用 credential helper")
@@ -79,8 +87,8 @@ class SimpleDevAgent:
                 "GIT_TERMINAL_PROMPT": "0",
                 "GIT_HTTP_USER_AGENT": "git/1.0"
             }
-            push_cmd = f'git -c credential.helper="store --file={cred_file}" push origin {current_branch}'
-            print(f"[DEBUG] 执行推送: git -c credential.helper='store' push origin {current_branch}")
+            push_cmd = f'git -c credential.helper="store --file={cred_file}" push {current_remote} {current_branch}'
+            print(f"[DEBUG] 执行推送: git -c credential.helper='store' push {current_remote} {current_branch}")
             push_success, push_msg = self._run_git_command_with_env(push_cmd, push_env)
             print(f"[DEBUG] push_success: {push_success}, push_msg: {push_msg}")
             
@@ -89,8 +97,8 @@ class SimpleDevAgent:
             except:
                 pass
         else:
-            print(f"[DEBUG] 无 GitHub Token，使用默认 origin")
-            push_success, push_msg = self._run_git_command(f"git push origin {current_branch}")
+            print(f"[DEBUG] 无 GitHub Token，使用默认 {current_remote}")
+            push_success, push_msg = self._run_git_command(f"git push {current_remote} {current_branch}")
         
         return push_success, push_msg
 
