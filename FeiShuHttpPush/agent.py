@@ -27,9 +27,9 @@ class SimpleDevAgent:
         env = os.environ.copy()
         if env_vars:
             env.update(env_vars)
-        
+
         try:
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, 
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                                   cwd=self.project_root, encoding='utf-8', errors='ignore',
                                   env=env)
             return result.returncode == 0, result.stdout.strip()
@@ -38,18 +38,6 @@ class SimpleDevAgent:
 
     def _run_git_command(self, cmd):
         return self._run_git_command_with_env(cmd)
-
-    def _get_current_branch(self):
-        success, output = self._run_git_command("git branch --show-current")
-        if success and output:
-            return output.strip()
-        return "main"
-
-    def _get_current_remote(self, branch_name):
-        success, output = self._run_git_command(f"git config branch.{branch_name}.remote")
-        if success and output:
-            return output.strip()
-        return "origin"
 
     def commit_changes(self, commit_msg):
 
@@ -65,41 +53,13 @@ class SimpleDevAgent:
             "GIT_CONFIG_GLOBAL": "/dev/null",
             "GIT_CONFIG_SYSTEM": "/dev/null"
         }
-        
+
         commit_cmd = f'git commit -m "{commit_msg}"'
         commit_success, commit_msg_out = self._run_git_command_with_env(commit_cmd, git_env)
         if not commit_success:
             return False, f"git commit failed: {commit_msg_out}"
 
-        current_branch = self._get_current_branch()
-        current_remote = self._get_current_remote(current_branch)
-        print(f"[DEBUG] 当前分支: {current_branch}, 当前远程: {current_remote}")
-        
-        if self.github_token:
-            print(f"[DEBUG] GitHub Token 已配置，使用 credential helper")
-            import tempfile
-            cred_file = os.path.join(tempfile.gettempdir(), 'feishu_agent_git_cred')
-            with open(cred_file, 'w') as f:
-                f.write(f"https://{self.github_token}@github.com\n")
-            
-            push_env = {
-                "GIT_TERMINAL_PROMPT": "0",
-                "GIT_HTTP_USER_AGENT": "git/1.0"
-            }
-            push_cmd = f'git -c credential.helper="store --file={cred_file}" push {current_remote} {current_branch}'
-            print(f"[DEBUG] 执行推送: git -c credential.helper='store' push {current_remote} {current_branch}")
-            push_success, push_msg = self._run_git_command_with_env(push_cmd, push_env)
-            print(f"[DEBUG] push_success: {push_success}, push_msg: {push_msg}")
-            
-            try:
-                os.remove(cred_file)
-            except:
-                pass
-        else:
-            print(f"[DEBUG] 无 GitHub Token，使用默认 {current_remote}")
-            push_success, push_msg = self._run_git_command(f"git push {current_remote} {current_branch}")
-        
-        return push_success, push_msg
+        return True, commit_msg_out
 
     def send_feishu_card(self, title, summary, commit_hash, fix_log):
         print(f"[SEND-FEISHU-SKIPPED] title: {title}")
@@ -184,28 +144,28 @@ java
             print("[INFO] 正在提交代码...")
             error_type = error_message.split(":")[0] if ":" in error_message else "RuntimeException"
             commit_msg = f"[AI-Fix] 修复 {error_type} in {file_path}"
-            push_success, push_msg = self.commit_changes(commit_msg)
+            commit_success, commit_msg_out = self.commit_changes(commit_msg)
 
 
             latest_commit = self._run_git_command("git rev-parse HEAD")[1]
-            if push_success:
+            if commit_success:
                 print(f"[SUCCESS] 自动修复完成!")
                 print(f"  - Commit: {latest_commit[:7]}")
-                print(f"  - Push Log: {push_msg}")
+                print(f"  - Commit Log: {commit_msg_out}")
                 self.send_feishu_card(
                     title=f"[SUCCESS] 自动修复完成: {os.path.basename(file_path)}",
                     summary=f"豆包分析：{fix_desc}",
                     commit_hash=latest_commit[:7],
-                    fix_log=push_msg
+                    fix_log=commit_msg_out
                 )
             else:
                 print(f"[WARNING] 代码已修复但提交失败")
-                print(f"  - Push Log: {push_msg}")
+                print(f"  - Commit Log: {commit_msg_out}")
                 self.send_feishu_card(
                     title=f"[WARNING] 代码已修复但提交失败",
                     summary=fix_desc,
                     commit_hash="N/A",
-                    fix_log=push_msg
+                    fix_log=commit_msg_out
                 )
 
         except Exception as e:
