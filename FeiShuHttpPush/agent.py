@@ -61,7 +61,51 @@ class SimpleDevAgent:
 
         return True, commit_msg_out
 
-    def send_feishu_card(self, title, summary, commit_hash, fix_log):
+    def create_gist(self, file_path, error_message):
+        if not self.github_token:
+            print("[WARNING] 未配置 GitHub Token，跳过创建 Gist")
+            return None
+
+        full_path = os.path.join(self.project_root, file_path)
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+        except Exception as e:
+            print(f"[WARNING] 读取文件失败: {e}")
+            return None
+
+        gist_data = {
+            "description": f"[AI-Fix] {error_message}",
+            "public": False,
+            "files": {
+                os.path.basename(file_path): {
+                    "content": file_content
+                }
+            }
+        }
+
+        headers = {
+            "Authorization": f"token {self.github_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+
+        try:
+            response = requests.post("https://api.github.com/gists", headers=headers, json=gist_data)
+            if response.status_code == 201:
+                gist_url = response.json().get("html_url")
+                print(f"[INFO] Gist 已创建: {gist_url}")
+                return gist_url
+            else:
+                print(f"[WARNING] 创建 Gist 失败，状态码: {response.status_code}")
+                print(f"[WARNING] 响应: {response.text}")
+                return None
+        except Exception as e:
+            print(f"[WARNING] 创建 Gist 异常: {e}")
+            return None
+
+    def send_feishu_card(self, title, summary, commit_hash, fix_log, gist_url=None):
+
+        review_url = gist_url if gist_url else "https://open.feishu.cn"
 
         import requests
         import json
@@ -142,10 +186,10 @@ class SimpleDevAgent:
                                         "behaviors": [
                                             {
                                                 "type": "open_url",
-                                                "default_url": "https://open.feishu.cn",
-                                                "pc_url": "https://open.feishu.cn",
-                                                "ios_url": "https://open.feishu.cn",
-                                                "android_url": "https://open.feishu.cn"
+                                                "default_url": review_url,
+                                                "pc_url": review_url,
+                                                "ios_url": review_url,
+                                                "android_url": review_url
                                             }
                                         ]
                                     }
@@ -254,15 +298,24 @@ java
 
 
             latest_commit = self._run_git_command("git rev-parse HEAD")[1]
+            
+            gist_url = None
+            if commit_success:
+                print("[INFO] 正在创建 Gist...")
+                gist_url = self.create_gist(file_path, error_message)
+
             if commit_success:
                 print(f"[SUCCESS] 自动修复完成!")
                 print(f"  - Commit: {latest_commit[:7]}")
                 print(f"  - Commit Log: {commit_msg_out}")
+                if gist_url:
+                    print(f"  - Gist: {gist_url}")
                 self.send_feishu_card(
                     title=f"[SUCCESS] 自动修复完成: {os.path.basename(file_path)}",
                     summary=f"豆包分析：{fix_desc}",
                     commit_hash=latest_commit[:7],
-                    fix_log=commit_msg_out
+                    fix_log=commit_msg_out,
+                    gist_url=gist_url
                 )
             else:
                 print(f"[WARNING] 代码已修复但提交失败")
