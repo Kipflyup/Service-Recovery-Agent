@@ -62,7 +62,113 @@ class SimpleDevAgent:
         return True, commit_msg_out
 
     def send_feishu_card(self, title, summary, commit_hash, fix_log):
-        print(f"[SEND-FEISHU-SKIPPED] title: {title}")
+
+        import requests
+        import json
+
+        card = {
+            "schema": "2.0",
+            "config": {
+                "update_multi": True,
+                "style": {
+                    "text_size": {
+                        "normal_v2": {
+                            "default": "normal",
+                            "pc": "normal",
+                            "mobile": "heading"
+                        }
+                    }
+                }
+            },
+            "body": {
+                "direction": "vertical",
+                "padding": "12px 12px 12px 12px",
+                "elements": [
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "plain_text",
+                            "content": title,
+                            "text_size": "normal_v2",
+                            "text_align": "left",
+                            "text_color": "default"
+                        },
+                        "margin": "0px 0px 0px 0px"
+                    },
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "plain_text",
+                            "content": summary,
+                            "text_size": "normal_v2",
+                            "text_align": "left",
+                            "text_color": "default"
+                        },
+                        "margin": "8px 0px 0px 0px"
+                    },
+                    {
+                        "tag": "column_set",
+                        "horizontal_align": "left",
+                        "columns": [
+                            {
+                                "tag": "column",
+                                "width": "weighted",
+                                "elements": [
+                                    {
+                                        "tag": "markdown",
+                                        "content": f"**Commit:** {commit_hash}\n**Log:** {fix_log}",
+                                        "text_align": "left",
+                                        "text_size": "normal_v2"
+                                    }
+                                ],
+                                "vertical_spacing": "8px",
+                                "horizontal_align": "left",
+                                "vertical_align": "top",
+                                "weight": 1
+                            },
+                            {
+                                "tag": "column",
+                                "width": "auto",
+                                "elements": [
+                                    {
+                                        "tag": "button",
+                                        "text": {
+                                            "tag": "plain_text",
+                                            "content": "查看详情"
+                                        },
+                                        "type": "danger",
+                                        "width": "default",
+                                        "size": "small",
+                                        "behaviors": [
+                                            {
+                                                "type": "open_url",
+                                                "default_url": "https://open.feishu.cn",
+                                                "pc_url": "https://open.feishu.cn",
+                                                "ios_url": "https://open.feishu.cn",
+                                                "android_url": "https://open.feishu.cn"
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "vertical_spacing": "8px",
+                                "horizontal_align": "left",
+                                "vertical_align": "top"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        headers = {'Content-Type': 'application/json'}
+        payload = {"msg_type": "interactive", "card": card}
+
+        try:
+            response = requests.post(self.feishu_webhook, headers=headers, data=json.dumps(payload))
+            return response.status_code == 200
+        except Exception as e:
+            print(f"发送飞书通知失败: {e}")
+            return False
 
     def analyze_and_fix_with_llm(self, file_path, error_message, stack_trace):
 
