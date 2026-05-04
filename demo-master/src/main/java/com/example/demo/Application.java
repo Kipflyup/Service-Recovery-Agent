@@ -20,8 +20,10 @@ public class Application {
         public String testException() {
             System.out.println("starting...");
             Object obj = null;
-            // 触发空指针异常
-            obj.toString();
+            // 修复空指针异常：添加非空校验
+            if (obj != null) {
+                obj.toString();
+            }
             return "ok";
         }
     }
