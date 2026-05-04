@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 
 PROJECT_ROOT = r"D:\demo-master"
-FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/66be4361-349b-43de-b13f-05ba4675eb50"
+FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/574f03ae-f5dc-4175-be68-a369256297b5"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 
