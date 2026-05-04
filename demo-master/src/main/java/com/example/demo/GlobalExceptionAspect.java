@@ -57,7 +57,7 @@ public class GlobalExceptionAspect {
             if (className.contains("$")) {
                 className = className.substring(0, className.indexOf("$"));
             }
-            String filePath = "src/main/java/" + className.replace('.', '/') + ".java";
+            String filePath = "demo-master/src/main/java/" + className.replace('.', '/') + ".java";
 
             String json = "{"
                     + "\"filePath\":\"" + filePath + "\","
