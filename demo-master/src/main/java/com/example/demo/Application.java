@@ -1,0 +1,30 @@
+package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.Objects;
+
+@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
+public class Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args == null ? new String[0] : args);
+    }
+
+    @RestController
+    public static class TestController {
+        @GetMapping("/test")
+        public String testException() {
+            System.out.println("starting...");
+            Object obj = null;
+            // 修复空指针异常：添加非空校验后再调用方法
+            if (Objects.nonNull(obj)) {
+                obj.toString();
+            }
+            return "ok";
+        }
+    }
+}
